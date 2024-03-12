@@ -1,0 +1,16 @@
+.button-payment-stripe {
+	display: block;
+	margin: 0 auto;
+	width: 290px;
+}
+
+.donates-today {
+	color: green;
+}
+
+code {
+	background-color: lightgray;
+	padding: 3px 5px;
+	color: black;
+	border-radius: 5px;
+}
