@@ -11,6 +11,7 @@ CREATE TABLE
     `settleCurrency` varchar(3) DEFAULT NULL,
     `status` varchar(10) DEFAULT NULL,
     `payment_status` varchar(10) DEFAULT NULL,
+    `json_payload` longtext DEFAULT NULL,
     `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
     PRIMARY KEY (`id`),
     KEY `stripe_transactions_event_index` (`event_reference_id`),

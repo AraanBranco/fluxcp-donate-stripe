@@ -13,10 +13,9 @@
 
 if (!defined('FLUX_ROOT')) exit;
 
-require_once './Stripe.php';
+require_once 'Stripe.php';
 if (isset($_POST)) {
-    $request = new Stripe();
+    $request = new Stripe($server);
     $request->process();
 }
-exit;
 ?>

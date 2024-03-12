@@ -19,7 +19,6 @@
         $customDataEscaped  = htmlspecialchars(base64_encode(serialize($customDataArray)));
         $creditAmount     = 1;
         $rateMultiplier   = 10;
-        $hoursHeld        = +(int)Flux::config('HoldUntrustedAccount');
 
         while ($dollarAmount < 1) {
             $dollarAmount  *= $rateMultiplier;

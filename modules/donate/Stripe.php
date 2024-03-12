@@ -92,13 +92,20 @@ class Stripe {
 	 */
 	public $creditsTable;
 
+    /**
+	 * @access public
+	 * @var Flux_Athena
+	 */
+	public $server;
+
 	/**
 	 * Construct new Stripe.
 	 *
 	 * @access public
 	 */
-	public function __construct()
+	public function __construct(Flux_Athena $server)
 	{
+        $this->server          = $server;
 		$this->logStripe       = new Flux_LogFile(FLUX_DATA_DIR.'/logs/stripe.log');
 		$this->creditsTable    = Flux::config('FluxTables.CreditsTable');
 		$this->myCurrencyCode  = strtoupper(Flux::config('DonationCurrency'));
@@ -303,6 +310,11 @@ class Stripe {
         $event_reference_id = isset($payload['payment_intent']) ? $payload['payment_intent'] : null;
         $error = null;
         $error_reason = null;
+        $amount =  $payload['amount'];
+
+        if (isset($payload['amount_total'])) {
+            $amount = $payload['amount_total'];
+        }
 
         if (isset($payload['latest_charge'])) {
             $event_reference_id = $payload['latest_charge'];
@@ -332,17 +344,17 @@ class Stripe {
             )
         ";
 
-        $sth = $servGroup->connection->getStatement($sql);
+        $sth = $this->server->connection->getStatement($sql);
         $ret = $sth->execute(array(
             $payload['id'],
             $event_reference_id,
             $payload['object'],
-            $payload['amount'],
+            $amount,
             $payload['currency'],
             $payload['status'],
             $error,
             $error_reason,
-            implode(",", json_decode($payload, true))
+            json_encode($payload)
         ));
 
         if ($ret) {
@@ -354,7 +366,7 @@ class Stripe {
         }
     }
 
-    private function createTransaction($payload, $accountID, $serverName, $credits = 0)
+    private function createTransaction($payload)
     {
         $customArray  = @unserialize(base64_decode((string)$payload['client_reference_id']));
         $customArray  = $customArray && is_array($customArray) ? $customArray : array();
@@ -362,8 +374,10 @@ class Stripe {
         $accountID    = $customData->get('account_id');
         $serverName   = $customData->get('server_name');
         $email        = $payload['customer_details']['email'];
-        $amount       = $payload['amount'];
+        $amount       = $payload['amount_total'];
         $minimum      = (float)Flux::config('MinDonationAmount');
+        $rate         = Flux::config('CreditExchangeRate');
+        $credits      = floor($amount / $rate);
 
         // How much will be deposited?
         $settleAmount   = $amount / 100;
@@ -408,39 +422,20 @@ class Stripe {
             }
 
             if ($amount >= $minimum) {
-                $trustTable = Flux::config('FluxTables.DonationTrustTable');
-
-                $sql = "SELECT account_id, email FROM {$servGroup->loginDatabase}.$trustTable WHERE account_id = ? AND email = ? LIMIT 1";
+                $sql = "SELECT * FROM {$servGroup->loginDatabase}.{$this->creditsTable} WHERE account_id = ?";
                 $sth = $servGroup->connection->getStatement($sql);
-                $sth->execute(array($accountID, $email));
-                $res = $sth->fetch();
+                $sth->execute(array($accountID));
+                $acc = $sth->fetch();
+                $balance = (int)$acc->balance;
 
-                if ($res && $res->account_id) {
-                    $this->logStripe('Account ID and e-mail are trusted.');
-                    $trusted = true;
+                $this->logStripe('Updating account credit balance from %s to %s', $balance, $balance + $credits);
+                $res = $servGroup->loginServer->depositCredits($accountID, $credits, $amount);
+
+                if ($res) {
+                    $this->logStripe('Deposited credits.');
                 }
                 else {
-                    $trusted = false;
-                }
-
-                if ($trusted) {
-                    $sql = "SELECT * FROM {$servGroup->loginDatabase}.{$this->creditsTable} WHERE account_id = ?";
-                    $sth = $servGroup->connection->getStatement($sql);
-                    $sth->execute(array($accountID));
-                    $acc = $sth->fetch();
-
-                    $this->logStripe('Updating account credit balance from %s to %s', (int)$acc->balance, $acc->balance + $credits);
-                    $res = $servGroup->loginServer->depositCredits($accountID, $credits, $amount);
-
-                    if ($res) {
-                        $this->logStripe('Deposited credits.');
-                    }
-                    else {
-                        $this->logStripe('Failed to deposit credits.');
-                    }
-                }
-                else {
-                    $this->logStripe('Account/e-mail is not trusted.');
+                    $this->logStripe('Failed to deposit credits.');
                 }
             }
         }
@@ -457,13 +452,14 @@ class Stripe {
                 settleCurrency,
                 status,
                 payment_status,
+                json_payload,
                 created_at
             ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()
             )
         ";
 
-        $sth = $servGroup->connection->getStatement($sql);
+        $sth = $this->server->connection->getStatement($sql);
         $ret = $sth->execute(array(
             $payload['payment_intent'],
             $accountID,
@@ -475,7 +471,7 @@ class Stripe {
             $settleCurrency,
             $payload['status'],
             $payload['payment_status'],
-            implode(",", json_decode($payload, true))
+            json_encode($payload)
         ));
 
         if ($ret) {
