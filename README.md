@@ -37,7 +37,7 @@ Feel free to contribute to the evolution of the code and if you use it, keep the
 ### My contacts
 Github: http://github.com/AraanBranco
 Email: araanbranco@protonmail.com
-rAthena: Morphz
+rAthena: [Morphz](https://rathena.org/board/profile/99218-morphz/)
 
 ## Support Me
 If you liked my work and want to help me in some way, buy me a coffee =)
